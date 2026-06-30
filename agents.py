@@ -121,46 +121,178 @@ class ImageReaderAgent:
 
 
 
-class ImageComparatorAgent:
-    """Agente especializado en comparar análisis de imágenes."""
+class TextExtractorAgent:
+    """Agente especializado en extraer texto completo de imágenes de contratos."""
     
     def __init__(self, langfuse_client: Optional[Langfuse] = None):
         self.langfuse_client = langfuse_client or Langfuse()
     
-    def compare(self, analysis_data: dict, custom_prompt: Optional[str] = None) -> dict:
+    def extract_text(self, image_path_1: str, image_path_2: str, custom_prompt: Optional[str] = None) -> dict:
         """
-        Compara dos análisis de imágenes para identificar diferencias.
+        Extrae el texto completo de dos imágenes de contrato usando vision.
         
         Args:
-            analysis_data: Diccionario con el análisis de ambas imágenes
+            image_path_1: Ruta a la primera imagen
+            image_path_2: Ruta a la segunda imagen
             custom_prompt: Prompt personalizado (opcional)
         
         Returns:
-            Diccionario con la comparación detallada
+            Diccionario con el texto extraído de ambos contratos
         """
         # Usar prompt personalizado o por defecto
         if custom_prompt is None:
-            custom_prompt = f"""Basándote en el siguiente análisis de dos imágenes:
+            custom_prompt = """Extrae el texto COMPLETO del contrato/documento de esta imagen de forma fiel y precisa.
+            
+            Requisitos:
+            1. Captura TODO el texto visible, manteniendo la estructura original
+            2. Preserva párrafos, listas numeradas y viñetas
+            3. Incluye títulos de secciones y subsecciones
+            4. Mantén la puntuación y formato original
+            5. Si hay tablas, representa su estructura con separadores claros
+            6. Si hay texto parcialmente legible, indica con [texto parcial] o [ilegible]
 
-{analysis_data['analysis']}
-
-Por favor, realiza una comparación detallada:
-1. **Similitudes**: ¿Qué elementos son comunes entre ambas imágenes?
-2. **Diferencias principales**: ¿Cuáles son las diferencias más notables?
-3. **Diferencias en detalles**: Diferencias en colores, tamaño, posición, etc.
-4. **Análisis contextual**: ¿Qué sugieren estas diferencias?
-5. **Conclusiones**: Resumen ejecutivo de las diferencias encontradas
-
-Responde en formato JSON con claves: 'similitudes', 'diferencias_principales', 'diferencias_detalles', 'analisis_contextual', 'conclusiones'."""
+            Responde SOLO con el texto extraído, sin comentarios adicionales."""
         
-        # Llamar a OpenAI para la comparación
+        # Extraer texto de la primera imagen
+        with open(image_path_1, "rb") as image_file:
+            image_1_base64 = base64.standard_b64encode(image_file.read()).decode("utf-8")
+        
+        extension_1 = Path(image_path_1).suffix.lower()
+        media_types = {
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".gif": "image/gif",
+            ".webp": "image/webp"
+        }
+        media_type_1 = media_types.get(extension_1, "image/jpeg")
+        
+        response_1 = openai.chat.completions.create(
+            name="extract-contract-text-1",
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": custom_prompt
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{media_type_1};base64,{image_1_base64}"
+                            }
+                        }
+                    ]
+                }
+            ]
+        )
+        
+        text_1 = response_1.choices[0].message.content
+        
+        # Extraer texto de la segunda imagen
+        with open(image_path_2, "rb") as image_file:
+            image_2_base64 = base64.standard_b64encode(image_file.read()).decode("utf-8")
+        
+        extension_2 = Path(image_path_2).suffix.lower()
+        media_type_2 = media_types.get(extension_2, "image/jpeg")
+        
+        response_2 = openai.chat.completions.create(
+            name="extract-contract-text-2",
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": custom_prompt
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{media_type_2};base64,{image_2_base64}"
+                            }
+                        }
+                    ]
+                }
+            ]
+        )
+        
+        text_2 = response_2.choices[0].message.content
+        
+        return {
+            "status": "success",
+            "text_1": text_1,
+            "text_2": text_2
+        }
+
+
+class ContextualizationAgent:
+    """Agente especializado en analizar y mapear la estructura contextual de documentos."""
+    
+    def __init__(self, langfuse_client: Optional[Langfuse] = None):
+        self.langfuse_client = langfuse_client or Langfuse()
+    
+    def build_context_map(self, analysis_1: str, analysis_2: str, custom_prompt: Optional[str] = None) -> dict:
+        """
+        Analiza la estructura comparada de dos documentos y construye un mapa contextual.
+        
+        Args:
+            analysis_1: Análisis parseado del primer documento
+            analysis_2: Análisis parseado del segundo documento
+            custom_prompt: Prompt personalizado (opcional)
+        
+        Returns:
+            Diccionario con el mapa contextual estructurado
+        """
+        # Usar prompt personalizado o por defecto
+        if custom_prompt is None:
+            custom_prompt = f"""Analiza la estructura comparada de estos dos documentos.
+
+DOCUMENTO 1:
+{analysis_1}
+
+DOCUMENTO 2:
+{analysis_2}
+
+Por favor, realiza un análisis ESTRUCTURAL (no de cambios):
+1. **Secciones en Documento 1**: Lista las secciones principales identificadas
+2. **Secciones en Documento 2**: Lista las secciones principales identificadas
+3. **Correspondencias**: Para cada sección, identifica su equivalente en el otro documento
+4. **Propósito de bloques**: Explica el propósito general de cada bloque/sección
+5. **Estructura comparada**: Cómo se alinean las estructuras entre documentos
+6. **Cambios estructurales**: Solo si hay reordenamiento o reorganización de secciones
+
+IMPORTANTE: Este análisis es sobre ESTRUCTURA y CONTEXTO, no sobre cambios de contenido.
+
+Responde en formato JSON con la siguiente estructura:
+{{
+    "documento_1": {{
+        "secciones": [lista de secciones],
+        "propósito_general": "..."
+    }},
+    "documento_2": {{
+        "secciones": [lista de secciones],
+        "propósito_general": "..."
+    }},
+    "correspondencias": [mapeo de secciones],
+    "análisis_contextual": {{
+        "propósito_por_bloque": {{}},
+        "cambios_estructurales": "..."
+    }},
+    "mapa_de_relaciones": "descripción de cómo se relacionan las estructuras"
+}}"""
+        
+        # Llamar a OpenAI para el análisis contextual
         response = openai.chat.completions.create(
-            name="compare-images",
+            name="build-context-map",
             model="gpt-4o",
             messages=[
                 {
                     "role": "system",
-                    "content": "Eres un experto en análisis comparativo de imágenes. Proporciona análisis detallados y precisos."
+                    "content": "Eres un experto en análisis de estructura de documentos. Tu tarea es identificar la estructura, secciones y contexto de documentos para construir mapas conceptuales. No analices cambios de contenido, solo estructura y correspondencias."
                 },
                 {
                     "role": "user",
@@ -169,45 +301,52 @@ Responde en formato JSON con claves: 'similitudes', 'diferencias_principales', '
             ]
         )
         
-        comparison_result = response.choices[0].message.content
+        context_map = response.choices[0].message.content
         
         return {
             "status": "success",
-            "comparison": comparison_result
+            "context_map": context_map
         }
 
 
+
 class ImageComparisonWorkflow:
-    """Orquesta el flujo de comparación de imágenes con dos agentes."""
+    """Orquesta el flujo de comparación de imágenes con tres agentes."""
     
     def __init__(self, langfuse_client: Optional[Langfuse] = None):
         self.langfuse_client = langfuse_client or Langfuse()
         self.reader_agent = ImageReaderAgent(self.langfuse_client)
-        self.comparator_agent = ImageComparatorAgent(self.langfuse_client)
+        self.contextualization_agent = ContextualizationAgent(self.langfuse_client)
+        self.text_extractor_agent = TextExtractorAgent(self.langfuse_client)
     
     def process(
         self,
         image_path_1: str,
         image_path_2: str,
         reader_prompt: Optional[str] = None,
-        comparator_prompt: Optional[str] = None
+        contextualization_prompt: Optional[str] = None,
+        text_extractor_prompt: Optional[str] = None
     ) -> dict:
         """
-        Ejecuta el flujo completo de comparación de imágenes.
+        Ejecuta el flujo completo de análisis con tres agentes:
+        1. Agente Lector: Analiza la estructura de ambos documentos
+        2. Agente Contextualizador: Mapea la estructura comparada
+        3. Agente Extractor de Texto: Extrae el texto completo de forma fiel
         
         Args:
             image_path_1: Ruta a la primera imagen
             image_path_2: Ruta a la segunda imagen
             reader_prompt: Prompt personalizado para el agente lector (opcional)
-            comparator_prompt: Prompt personalizado para el agente comparador (opcional)
+            contextualization_prompt: Prompt personalizado para contextualizador (opcional)
+            text_extractor_prompt: Prompt personalizado para extractor de texto (opcional)
         
         Returns:
-            Diccionario con los resultados del análisis y comparación
+            Diccionario con los resultados de todos los agentes
         """
         # Crear un trace ID para toda la sesión
         trace_id = self.langfuse_client.create_trace_id()
         
-        # Ejecutar Agente 1
+        # Paso 1: Agente Lector - Analizar ambas imágenes
         analysis_result = self.reader_agent.analyze(
             image_path_1,
             image_path_2,
@@ -217,19 +356,41 @@ class ImageComparisonWorkflow:
         if analysis_result["status"] != "success":
             return {"error": "Reader agent failed"}
         
-        # Ejecutar Agente 2
-        comparison_result = self.comparator_agent.compare(
-            analysis_result,
-            comparator_prompt
+        # Extraer análisis individuales para pasar al siguiente agente
+        import json
+        try:
+            analysis_dict = eval(analysis_result["analysis"])
+            analysis_1 = analysis_dict.get("imagen_1", "")
+            analysis_2 = analysis_dict.get("imagen_2", "")
+        except:
+            analysis_1 = analysis_result["analysis"]
+            analysis_2 = analysis_result["analysis"]
+        
+        # Paso 2: Agente Contextualizador - Construir mapa contextual
+        contextualization_result = self.contextualization_agent.build_context_map(
+            analysis_1,
+            analysis_2,
+            contextualization_prompt
         )
         
-        if comparison_result["status"] != "success":
-            return {"error": "Comparator agent failed"}
+        if contextualization_result["status"] != "success":
+            return {"error": "Contextualization agent failed"}
+        
+        # Paso 3: Agente Extractor de Texto - Extraer texto completo de contratos
+        text_extraction_result = self.text_extractor_agent.extract_text(
+            image_path_1,
+            image_path_2,
+            text_extractor_prompt
+        )
+        
+        if text_extraction_result["status"] != "success":
+            return {"error": "Text extractor agent failed"}
         
         return {
             "status": "success",
             "trace_id": trace_id,
             "image_analysis": analysis_result,
-            "image_comparison": comparison_result
+            "context_map": contextualization_result,
+            "extracted_text": text_extraction_result
         }
 

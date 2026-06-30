@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Script de ejemplo para probar el sistema de comparación de imágenes.
-Descarga imágenes de ejemplo y ejecuta el análisis completo.
+Script de ejemplo para probar el sistema de análisis de contratos.
+Ejecuta el análisis completo con imágenes de la carpeta examples/.
 """
 
 import os
@@ -14,7 +14,6 @@ from agents import ImageComparisonWorkflow
 from utils import (
     ConsoleFormatter, 
     ResultSaver, 
-    create_test_images,
     print_workflow_status
 )
 from config import validate_configuration
@@ -26,27 +25,7 @@ load_dotenv()
 langfuse_client = Langfuse()
 
 
-def download_example_images():
-    """Descarga imágenes de ejemplo para las pruebas."""
-    print("📥 Descargando imágenes de ejemplo...")
-    
-    import urllib.request
-    
-    # Crear directorio de ejemplos
-    examples_dir = Path("examples")
-    examples_dir.mkdir(exist_ok=True)
-    
-    # Imágenes de ejemplo (deberías reemplazar estos URLs con imágenes reales)
-    # Para demostración, usaremos imágenes públicas de ejemplo
-    
-    print("   ℹ️  Nota: Por favor, coloca dos imágenes en el directorio 'examples/'")
-    print("   ℹ️  Ejemplo:")
-    print("       - examples/image_1.jpg")
-    print("       - examples/image_2.jpg")
-    return False
-
-
-def demonstrate_workflow(image_1: str, image_2: str, custom_reader_prompt: str = None, custom_comparator_prompt: str = None):
+def demonstrate_workflow(image_1: str, image_2: str, custom_reader_prompt: str = None, custom_text_extractor_prompt: str = None):
     """Demuestra el flujo completo de análisis y comparación."""
     
     # Validar que las imágenes existan
@@ -59,7 +38,7 @@ def demonstrate_workflow(image_1: str, image_2: str, custom_reader_prompt: str =
         return
     
     print("\n" + "=" * 70)
-    print("🚀 SISTEMA DE COMPARACIÓN DE IMÁGENES CON AGENTES IA")
+    print("🚀 SISTEMA DE ANÁLISIS DE CONTRATOS CON AGENTES IA")
     print("=" * 70)
     print()
     
@@ -78,7 +57,7 @@ def demonstrate_workflow(image_1: str, image_2: str, custom_reader_prompt: str =
         image_1,
         image_2,
         reader_prompt=custom_reader_prompt,
-        comparator_prompt=custom_comparator_prompt
+        text_extractor_prompt=custom_text_extractor_prompt
     )
     
     if "error" in result:
@@ -87,17 +66,30 @@ def demonstrate_workflow(image_1: str, image_2: str, custom_reader_prompt: str =
     
     # Mostrar resultados
     print("=" * 70)
-    print("✅ ANÁLISIS DE IMÁGENES (Agente 1: Lector)")
+    print("✅ ANÁLISIS DE ESTRUCTURA (Agente 1: Lector)")
     print("=" * 70)
     print()
     print(result["image_analysis"]["analysis"])
     print()
     
     print("=" * 70)
-    print("✅ COMPARACIÓN DE IMÁGENES (Agente 2: Comparador)")
+    print("📊 MAPA CONTEXTUAL (Agente 2: Contextualizador)")
     print("=" * 70)
     print()
-    print(result["image_comparison"]["comparison"])
+    print(result["context_map"]["context_map"])
+    print()
+    
+    print("=" * 70)
+    print("📄 TEXTO EXTRAÍDO (Agente 3: Extractor de Texto)")
+    print("=" * 70)
+    print()
+    print("--- CONTRATO 1 ---")
+    print()
+    print(result["extracted_text"]["text_1"])
+    print()
+    print("--- CONTRATO 2 ---")
+    print()
+    print(result["extracted_text"]["text_2"])
     print()
     
     # Mostrar información de Langfuse
@@ -109,7 +101,8 @@ def demonstrate_workflow(image_1: str, image_2: str, custom_reader_prompt: str =
     # Guardar en JSON
     result_to_save = {
         "image_analysis": result["image_analysis"],
-        "image_comparison": result["image_comparison"]
+        "context_map": result["context_map"],
+        "extracted_text": result["extracted_text"]
     }
     
     json_path = ResultSaver.save_json(result_to_save)
@@ -118,7 +111,7 @@ def demonstrate_workflow(image_1: str, image_2: str, custom_reader_prompt: str =
     # Guardar en Markdown
     md_path = ResultSaver.save_markdown(
         result["image_analysis"]["analysis"],
-        result["image_comparison"]["comparison"]
+        result["extracted_text"]["text_1"]
     )
     print(f"  ✓ Markdown: {md_path.name}")
     
@@ -164,31 +157,20 @@ def main():
     )
     
     parser.add_argument(
-        "--comparator-prompt",
+        "--text-extractor-prompt",
         type=str,
         default=None,
-        help="Prompt personalizado para el agente comparador (opcional)"
-    )
-    
-    parser.add_argument(
-        "--download-examples",
-        action="store_true",
-        help="Descargar imágenes de ejemplo"
+        help="Prompt personalizado para el agente extractor de texto (opcional)"
     )
     
     args = parser.parse_args()
-    
-    # Descargar ejemplos si se solicita
-    if args.download_examples:
-        download_example_images()
-        return
     
     # Ejecutar el análisis
     demonstrate_workflow(
         args.image1,
         args.image2,
         args.reader_prompt,
-        args.comparator_prompt
+        args.text_extractor_prompt
     )
 
 

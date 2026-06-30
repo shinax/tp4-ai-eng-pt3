@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Script de prueba para el sistema de comparación de imágenes.
-Crea imágenes de prueba y ejecuta el análisis completo.
+Script de prueba para el sistema de análisis de contratos.
+Ejecuta el análisis completo usando imágenes de la carpeta examples/.
 """
 
 import os
@@ -18,7 +18,6 @@ from agents import ImageComparisonWorkflow
 from utils import (
     ConsoleFormatter, 
     ResultSaver, 
-    create_test_images,
     print_workflow_status
 )
 from config import validate_configuration
@@ -39,21 +38,18 @@ def run_test():
     for warning in config["warnings"]:
         ConsoleFormatter.print_warning(f"  {warning}")
     
-    # Crear imágenes de prueba
+    # Usar imágenes de la carpeta examples
     ConsoleFormatter.print_header("🧪 PRUEBA DEL SISTEMA DE COMPARACIÓN DE IMÁGENES")
-    
-    print_workflow_status("init", "Creando imágenes de prueba...")
-    if not create_test_images():
-        ConsoleFormatter.print_error("No se pudieron crear las imágenes de prueba")
-        return False
-    ConsoleFormatter.print_success("Imágenes de prueba creadas")
     
     # Verificar que las imágenes existan
     image_1 = "examples/image_1.jpg"
     image_2 = "examples/image_2.jpg"
     
     if not os.path.exists(image_1) or not os.path.exists(image_2):
-        ConsoleFormatter.print_error(f"No se encontraron las imágenes de prueba")
+        ConsoleFormatter.print_error(f"No se encontraron imágenes en la carpeta examples/")
+        ConsoleFormatter.print_info(f"Por favor, coloca dos imágenes JPG en examples/")
+        ConsoleFormatter.print_info(f"  - examples/image_1.jpg")
+        ConsoleFormatter.print_info(f"  - examples/image_2.jpg")
         return False
     
     # Inicializar Langfuse
@@ -89,8 +85,22 @@ def run_test():
         print(result["image_analysis"]["analysis"])
         print()
         
-        ConsoleFormatter.print_section("🔄 Comparación de Imágenes (Agente 2: Comparador)")
-        print(result["image_comparison"]["comparison"])
+        ConsoleFormatter.print_section("� Mapa Contextual (Agente 2: Contextualizador)")
+        print(result["context_map"]["context_map"])
+        print()
+        
+        ConsoleFormatter.print_section("� Mapa Contextual (Agente 2: Contextualizador)")
+        print(result["context_map"]["context_map"])
+        print()
+        
+        ConsoleFormatter.print_section("📄 Texto Extraído (Agente 3: Extractor de Texto)")
+        print("--- CONTRATO 1 ---")
+        print()
+        print(result["extracted_text"]["text_1"])
+        print()
+        print("--- CONTRATO 2 ---")
+        print()
+        print(result["extracted_text"]["text_2"])
         print()
         
         # Guardar resultados
@@ -99,7 +109,8 @@ def run_test():
         # Guardar en JSON
         result_to_save = {
             "image_analysis": result["image_analysis"],
-            "image_comparison": result["image_comparison"]
+            "context_map": result["context_map"],
+            "extracted_text": result["extracted_text"]
         }
         
         json_path = ResultSaver.save_json(result_to_save)
@@ -108,7 +119,7 @@ def run_test():
         # Guardar en Markdown
         md_path = ResultSaver.save_markdown(
             result["image_analysis"]["analysis"],
-            result["image_comparison"]["comparison"]
+            result["extracted_text"]["text_1"]
         )
         print(f"  ✓ Markdown: {md_path.name}")
         

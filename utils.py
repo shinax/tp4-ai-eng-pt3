@@ -212,35 +212,3 @@ def print_workflow_status(stage: str, status: str, details: Optional[str] = None
         if details:
             print(f"   └─ {details}")
 
-
-# Test utilities
-def create_test_images():
-    """Crea imágenes de prueba para testing."""
-    try:
-        from PIL import Image, ImageDraw
-        
-        examples_dir = Path("examples")
-        examples_dir.mkdir(exist_ok=True)
-        
-        # Crear imagen 1: Rectángulo azul
-        img1 = Image.new('RGB', (400, 300), color='white')
-        draw1 = ImageDraw.Draw(img1)
-        draw1.rectangle([50, 50, 350, 250], fill='blue', outline='black', width=2)
-        draw1.text((150, 130), "Imagen 1", fill='white')
-        img1.save(examples_dir / "image_1.jpg")
-        
-        # Crear imagen 2: Rectángulo rojo
-        img2 = Image.new('RGB', (400, 300), color='white')
-        draw2 = ImageDraw.Draw(img2)
-        draw2.rectangle([50, 50, 350, 250], fill='red', outline='black', width=2)
-        draw2.text((150, 130), "Imagen 2", fill='white')
-        img2.save(examples_dir / "image_2.jpg")
-        
-        logger.info("Imágenes de prueba creadas exitosamente")
-        return True
-    except ImportError:
-        logger.error("Pillow no está instalada. Instala con: pip install Pillow")
-        return False
-    except Exception as e:
-        logger.error(f"Error al crear imágenes de prueba: {e}")
-        return False
