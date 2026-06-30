@@ -103,6 +103,48 @@ def run_test():
         print(result["extracted_text"]["text_2"])
         print()
         
+        ConsoleFormatter.print_section("🔍 Cambios Identificados (Agente 4: Extractor de Cambios)")
+        
+        if "extracted_changes" in result:
+            changes = result["extracted_changes"]
+            
+            if changes["status"] == "success" or changes["status"] == "validation_error":
+                changes_data = changes.get("changes", {})
+                
+                # Mostrar resumen general de cambios
+                if isinstance(changes_data, dict):
+                    summary = changes_data.get("summary_of_the_change", "")
+                    sections = changes_data.get("sections_changed", [])
+                    topics = changes_data.get("topics_touched", [])
+                    
+                    if summary:
+                        print("\n📋 RESUMEN DE CAMBIOS")
+                        print("-" * 50)
+                        print(summary)
+                        print()
+                    
+                    if sections:
+                        print("📍 SECCIONES MODIFICADAS")
+                        print("-" * 50)
+                        for section in sections:
+                            print(f"  • {section}")
+                        print()
+                    
+                    if topics:
+                        print("🏷️  TÓPICOS AFECTADOS")
+                        print("-" * 50)
+                        for topic in topics:
+                            print(f"  • {topic}")
+                        print()
+                
+                if changes["status"] == "validation_error":
+                    print(f"⚠️  Nota: Cambios extraídos pero con validación parcial")
+                    print(f"Error: {changes.get('error', 'Desconocido')}")
+            else:
+                print(f"❌ Error al extraer cambios: {changes.get('error', 'Desconocido')}")
+        
+        print()
+        
         # Guardar resultados
         ConsoleFormatter.print_section("💾 Guardando Resultados")
         
@@ -110,7 +152,8 @@ def run_test():
         result_to_save = {
             "image_analysis": result["image_analysis"],
             "context_map": result["context_map"],
-            "extracted_text": result["extracted_text"]
+            "extracted_text": result["extracted_text"],
+            "extracted_changes": result.get("extracted_changes", {})
         }
         
         json_path = ResultSaver.save_json(result_to_save)

@@ -4,10 +4,38 @@ Proporciona agentes reutilizables para lectura y comparación de imágenes.
 """
 
 import base64
+import json
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from langfuse.openai import openai
 from langfuse import Langfuse
+from pydantic import BaseModel, Field
+
+
+# Modelos Pydantic para validación de cambios
+class Change(BaseModel):
+    """Modelo para un cambio específico"""
+    section: str = Field(..., description="Sección donde ocurre el cambio")
+    description: str = Field(..., description="Descripción detallada del cambio")
+    original_text: Optional[str] = Field(None, description="Texto original (para eliminaciones y modificaciones)")
+    new_text: Optional[str] = Field(None, description="Texto nuevo (para adiciones y modificaciones)")
+    context: Optional[str] = Field(None, description="Contexto del cambio para mayor claridad")
+
+
+class ContractChangeOutput(BaseModel):
+    """Modelo para el output validado del ChangeExtractorAgent"""
+    sections_changed: List[str] = Field(default_factory=list, description="Identificadores únicos de secciones modificadas (ej: 1, 2, 3, 7)")
+    topics_touched: List[str] = Field(default_factory=list, description="Categorías legales/comerciales afectadas (ej: Plazo, Pago, Responsabilidad, etc.)")
+    summary_of_the_change: str = Field(default="", description="Descripción detallada y comprehensiva de todos los cambios realizados en la enmienda")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "sections_changed": ["1", "2", "3", "4", "5", "7"],
+                "topics_touched": ["Alcance de Licencia", "Plazo", "Pago", "Soporte", "Terminación", "Protección de Datos"],
+                "summary_of_the_change": "La enmienda modifica términos clave del contrato incluyendo: extensión de plazo (12→24 meses), aumento de tarifa (USD 12K→15K), adición de soporte vía chat, ampliación del alcance de uso, extensión del período de terminación (30→60 días), y agregación de cláusula de protección de datos."
+            }
+        }
 
 
 def parse_contract_image(image_path: str, image_label: str, custom_prompt: Optional[str] = None) -> dict:
@@ -229,6 +257,122 @@ class TextExtractorAgent:
         }
 
 
+class ChangeExtractorAgent:
+    """Agente especializado en extraer y clasificar cambios entre dos documentos."""
+    
+    def __init__(self, langfuse_client: Optional[Langfuse] = None):
+        self.langfuse_client = langfuse_client or Langfuse()
+    
+    def extract_changes(
+        self, 
+        text_1: str, 
+        text_2: str,
+        context_map: Optional[str] = None,
+        custom_prompt: Optional[str] = None
+    ) -> dict:
+        """
+        Identifica, aísla y describe cada cambio entre dos textos.
+        Distingue entre adiciones, eliminaciones y modificaciones.
+        
+        Args:
+            text_1: Texto del documento original
+            text_2: Texto del documento con enmienda
+            context_map: Mapa contextual del ContextualizationAgent (opcional)
+            custom_prompt: Prompt personalizado (opcional)
+        
+        Returns:
+            Diccionario con cambios estructurados y validados
+        """
+        # Usar prompt personalizado o por defecto
+        if custom_prompt is None:
+            context_section = f"""
+
+MAPA CONTEXTUAL (para referencia):
+{context_map}""" if context_map else ""
+            
+            custom_prompt = f"""Analiza los siguientes dos textos de contrato y extrae un resumen integral de todos los cambios.{context_section}
+
+DOCUMENTO ORIGINAL:
+{text_1}
+
+DOCUMENTO CON ENMIENDA:
+{text_2}
+
+Por favor, responde ESTRICTAMENTE con un JSON válido que siga esta estructura:
+{{
+    "sections_changed": ["1", "2", "3"],
+    "topics_touched": ["Plazo", "Pago", "Soporte"],
+    "summary_of_the_change": "Descripción detallada de todos los cambios realizados..."
+}}
+
+INSTRUCCIONES:
+1. sections_changed: Lista de identificadores numéricos/alfanuméricos de TODAS las secciones afectadas (ej: "1", "2.1", "7", etc.)
+2. topics_touched: Lista de categorías legales o comerciales afectadas (ej: "Plazo", "Pago", "Responsabilidad", "Confidencialidad", etc.)
+3. summary_of_the_change: Resumen COMPRENSIVO que capture la esencia de TODOS los cambios de forma coherente y ejecutiva, explicando:
+   - Qué se modificó (cambios principales)
+   - Cómo se modificó (especificidades)
+   - Por qué se modificó (contexto o razón)
+   - El impacto general de los cambios
+
+El resumen debe ser texto narrativo claro, no JSON.
+4. El JSON debe ser válido y parseable
+5. No incluyas comentarios fuera del JSON"""
+        
+        # Llamar a OpenAI para extraer cambios
+        response = openai.chat.completions.create(
+            name="extract-changes",
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Eres un experto en análisis de cambios en documentos. Tu tarea es identificar, aislar y clasificar cada cambio entre dos versiones de un documento. Debes ser exhaustivo y preciso."
+                },
+                {
+                    "role": "user",
+                    "content": custom_prompt
+                }
+            ]
+        )
+        
+        changes_text = response.choices[0].message.content
+        
+        # Parsear respuesta JSON
+        try:
+            # Intentar extraer JSON si está envuelto en markdown
+            if "```json" in changes_text:
+                start = changes_text.find("```json") + 7
+                end = changes_text.find("```", start)
+                changes_text = changes_text[start:end].strip()
+            elif "```" in changes_text:
+                start = changes_text.find("```") + 3
+                end = changes_text.find("```", start)
+                changes_text = changes_text[start:end].strip()
+            
+            changes_dict = json.loads(changes_text)
+        except json.JSONDecodeError:
+            return {
+                "status": "error",
+                "error": "No se pudo parsear la respuesta como JSON válido",
+                "raw_response": changes_text
+            }
+        
+        # Validar con Pydantic
+        try:
+            validated_changes = ContractChangeOutput(**changes_dict)
+            return {
+                "status": "success",
+                "changes": validated_changes.model_dump(),
+                "validated": True
+            }
+        except Exception as e:
+            return {
+                "status": "validation_error",
+                "error": str(e),
+                "changes": changes_dict,
+                "validated": False
+            }
+
+
 class ContextualizationAgent:
     """Agente especializado en analizar y mapear la estructura contextual de documentos."""
     
@@ -311,13 +455,14 @@ Responde en formato JSON con la siguiente estructura:
 
 
 class ImageComparisonWorkflow:
-    """Orquesta el flujo de comparación de imágenes con tres agentes."""
+    """Orquesta el flujo de comparación de imágenes con cuatro agentes."""
     
     def __init__(self, langfuse_client: Optional[Langfuse] = None):
         self.langfuse_client = langfuse_client or Langfuse()
         self.reader_agent = ImageReaderAgent(self.langfuse_client)
         self.contextualization_agent = ContextualizationAgent(self.langfuse_client)
         self.text_extractor_agent = TextExtractorAgent(self.langfuse_client)
+        self.change_extractor_agent = ChangeExtractorAgent(self.langfuse_client)
     
     def process(
         self,
@@ -325,13 +470,15 @@ class ImageComparisonWorkflow:
         image_path_2: str,
         reader_prompt: Optional[str] = None,
         contextualization_prompt: Optional[str] = None,
-        text_extractor_prompt: Optional[str] = None
+        text_extractor_prompt: Optional[str] = None,
+        change_extractor_prompt: Optional[str] = None
     ) -> dict:
         """
-        Ejecuta el flujo completo de análisis con tres agentes:
+        Ejecuta el flujo completo de análisis con cuatro agentes:
         1. Agente Lector: Analiza la estructura de ambos documentos
         2. Agente Contextualizador: Mapea la estructura comparada
         3. Agente Extractor de Texto: Extrae el texto completo de forma fiel
+        4. Agente Extractor de Cambios: Identifica y clasifica cambios
         
         Args:
             image_path_1: Ruta a la primera imagen
@@ -339,6 +486,7 @@ class ImageComparisonWorkflow:
             reader_prompt: Prompt personalizado para el agente lector (opcional)
             contextualization_prompt: Prompt personalizado para contextualizador (opcional)
             text_extractor_prompt: Prompt personalizado para extractor de texto (opcional)
+            change_extractor_prompt: Prompt personalizado para extractor de cambios (opcional)
         
         Returns:
             Diccionario con los resultados de todos los agentes
@@ -357,7 +505,6 @@ class ImageComparisonWorkflow:
             return {"error": "Reader agent failed"}
         
         # Extraer análisis individuales para pasar al siguiente agente
-        import json
         try:
             analysis_dict = eval(analysis_result["analysis"])
             analysis_1 = analysis_dict.get("imagen_1", "")
@@ -386,11 +533,23 @@ class ImageComparisonWorkflow:
         if text_extraction_result["status"] != "success":
             return {"error": "Text extractor agent failed"}
         
+        # Paso 4: Agente Extractor de Cambios - Identificar y clasificar cambios
+        change_extraction_result = self.change_extractor_agent.extract_changes(
+            text_extraction_result["text_1"],
+            text_extraction_result["text_2"],
+            contextualization_result["context_map"],
+            change_extractor_prompt
+        )
+        
+        if change_extraction_result["status"] not in ["success", "validation_error"]:
+            return {"error": "Change extractor agent failed"}
+        
         return {
             "status": "success",
             "trace_id": trace_id,
             "image_analysis": analysis_result,
             "context_map": contextualization_result,
-            "extracted_text": text_extraction_result
+            "extracted_text": text_extraction_result,
+            "extracted_changes": change_extraction_result
         }
 
