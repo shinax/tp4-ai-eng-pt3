@@ -1,0 +1,14 @@
+# Core LLM and AI
+openai
+langchain
+langchain-openai
+
+# Observability and Tracing
+langfuse
+
+# Configuration and Utilities
+python-dotenv
+pydantic
+
+# Development
+ruff
