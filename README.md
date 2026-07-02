@@ -1,17 +1,21 @@
-# 🤖 Sistema de Comparación de Imágenes con Agentes IA
+# 🤖 Sistema de Análisis de Contratos con Agentes IA
 
-Una aplicación Python de dos agentes de IA que lee y compara imágenes usando OpenAI Vision, con trazas completas en Langfuse.
+Una aplicación Python de **cuatro agentes de IA** que leen, contextualizan, extraen y comparan contratos usando OpenAI Vision (GPT-4o), con trazas completas en Langfuse y validación estructurada con Pydantic.
 
 ## ✨ Características Principales
 
-- **🤖 Dos Agentes Especializados**:
-  - **Agente 1 (Lector)**: Lee y analiza dos imágenes en detalle
-  - **Agente 2 (Comparador)**: Compara los análisis y encuentra diferencias
+- **🤖 Cuatro Agentes Especializados** en pipeline secuencial:
+  - **Agente 1 (Lector)**: Analiza la estructura de ambos documentos
+  - **Agente 2 (Contextualizador)**: Mapea estructura comparada e identifica correspondencias
+  - **Agente 3 (Extractor de Texto)**: Extrae el texto completo preservando estructura
+  - **Agente 4 (Extractor de Cambios)**: Identifica, aísla y clasifica cambios con validación Pydantic
   
-- **📊 Trazas Completas en Langfuse**: Monitoreo de cada paso del proceso
+- **📊 Trazas Completas en Langfuse**: Monitoreo automático de cada llamada a GPT-4o
+- **✅ Validación Estructurada**: Modelos Pydantic para garantizar calidad de datos
 - **🖼️ Soporte Multi-formato**: JPG, PNG, GIF, WebP
 - **⚙️ Configuración Flexible**: Prompts personalizables por agente
-- **📦 Modular y Reutilizable**: Fácil de extender con nuevos agentes
+- **📦 Modular y Extensible**: Arquitectura lista para agregar más agentes (Reportes, Análisis Adicional, etc.)
+- **🗺️ Análisis Comparativo Sofisticado**: Cambios clasificados en adiciones, eliminaciones y modificaciones
 
 ## 🚀 Inicio Rápido
 
@@ -38,11 +42,14 @@ LANGFUSE_SECRET_KEY=sk-lf-...
 ### 3. Ejecución
 
 ```bash
-# Opción 1: Prueba rápida con imágenes generadas
+# Opción 1: Prueba rápida con imágenes de prueba
 python test_app.py
 
-# Opción 2: Con tus propias imágenes
-python example.py --image1 path/to/image1.jpg --image2 path/to/image2.jpg
+# Opción 2: Con contratos reales
+python example.py --image1 ./examples/documento_1__original.jpg --image2 ./examples/documento_1__enmienda.jpg
+
+# Opción 3: Con prompts personalizados
+python example.py --image1 doc1.jpg --image2 doc2.jpg --reader-prompt "Enfócate en cláusulas legales"
 ```
 
 ## 📚 Estructura del Proyecto
@@ -59,34 +66,57 @@ python example.py --image1 path/to/image1.jpg --image2 path/to/image2.jpg
 └── .env                      # Variables de entorno
 ```
 
-## 🏗️ Arquitectura de Agentes
+## 🏗️ Arquitectura de Agentes (4 Agentes)
 
 ```
 ┌──────────────────────────────────────────────┐
 │         IMAGEN 1  │  IMAGEN 2                │
 └────────┬──────────────────────┬──────────────┘
          │                      │
-    ┌────▼──────────────────────▼────┐
-    │   AGENTE 1: ImageReaderAgent   │
-    │   ▪ Lee ambas imágenes         │
-    │   ▪ Extrae características    │
-    │   ▪ Genera análisis detallado │
-    └────┬──────────────────────────┘
+    ┌────▼──────────────────────▼──────────────┐
+    │   AGENTE 1: ImageReaderAgent             │
+    │   ▪ Lee ambas imágenes                   │
+    │   ▪ Analiza estructura visual            │
+    │   ▪ Extrae características               │
+    │   ▪ Genera análisis detallado            │
+    └────┬─────────────────────────────────────┘
          │
-    ┌────▼──────────────────────────┐
-    │ AGENTE 2: ImageComparatorAgent│
-    │ ▪ Recibe análisis             │
-    │ ▪ Identifica similitudes      │
-    │ ▪ Encuentra diferencias       │
-    │ ▪ Genera conclusiones         │
-    └────┬──────────────────────────┘
+    ┌────▼──────────────────────────────────────┐
+    │ AGENTE 2: ContextualizationAgent          │
+    │ ▪ Mapea estructura comparada             │
+    │ ▪ Identifica secciones equivalentes      │
+    │ ▪ Establece correspondencias             │
+    │ ▪ Analiza cambios estructurales         │
+    │ ▪ Propone mapa de relaciones             │
+    └────┬──────────────────────────────────────┘
          │
-    ┌────▼──────────────────────────┐
-    │   REPORTE FINAL               │
-    │ ▪ Análisis detallado          │
-    │ ▪ Comparación completa        │
-    │ ▪ Insights y conclusiones     │
-    └───────────────────────────────┘
+    ┌────▼──────────────────────────────────────┐
+    │ AGENTE 3: TextExtractorAgent             │
+    │ ▪ Extrae texto completo de imágenes      │
+    │ ▪ Mantiene estructura original           │
+    │ ▪ Preserva formato y puntuación          │
+    │ ▪ Marca secciones ilegibles              │
+    │ ▪ Prepara texto para análisis            │
+    └────┬──────────────────────────────────────┘
+         │
+    ┌────▼──────────────────────────────────────┐
+    │ AGENTE 4: ChangeExtractorAgent ✨        │
+    │ ▪ Identifica cambios específicos         │
+    │ ▪ Clasifica en adiciones/eliminaciones   │
+    │ ▪ Detecta modificaciones                 │
+    │ ▪ Describe razones de cambios            │
+    │ ▪ Valida con modelos Pydantic           │
+    │ ▪ Retorna JSON estructurado             │
+    └────┬──────────────────────────────────────┘
+         │
+    ┌────▼──────────────────────────────────────┐
+    │   SALIDA FINAL                            │
+    │ ▪ Análisis de estructura                 │
+    │ ▪ Mapa contextual                        │
+    │ ▪ Texto extraído (ambos documentos)      │
+    │ ▪ Cambios clasificados ✨               │
+    │ ▪ Listo para reportes/acción             │
+    └───────────────────────────────────────────┘
 ```
 
 ## 💻 Ejemplos de Uso
@@ -101,10 +131,10 @@ python example.py --image1 screenshot_before.png --image2 screenshot_after.png
 
 ```bash
 python example.py \
-  --image1 photo1.jpg \
-  --image2 photo2.jpg \
-  --reader-prompt "Enfócate en los objetos principales" \
-  --comparator-prompt "Identifica cambios de color y tamaño"
+  --image1 doc1.jpg \
+  --image2 doc2.jpg \
+  --reader-prompt "Identifica el tipo de documento y estructura" \
+  --text-extractor-prompt "Extrae solo las secciones principales"
 ```
 
 ### Desde Código Python
@@ -125,7 +155,19 @@ result = workflow.process("image1.jpg", "image2.jpg")
 
 # Mostrar resultados
 print("Análisis:", result["image_analysis"]["analysis"])
-print("Comparación:", result["image_comparison"]["comparison"])
+print("Contexto:", result["context_map"]["context_map"])
+print("Texto 1:", result["extracted_text"]["text_1"])
+print("Texto 2:", result["extracted_text"]["text_2"])
+
+# ✨ Nuevo: Acceder a cambios clasificados
+changes = result["extracted_changes"]["changes"]
+print(f"\nAdiciones detectadas: {len(changes.additions)}")
+for addition in changes.additions:
+    print(f"  - {addition.section}: {addition.description}")
+
+print(f"\nModificaciones detectadas: {len(changes.modifications)}")
+for mod in changes.modifications:
+    print(f"  - {mod.section}: {mod.description}")
 
 # Flush para asegurar que las trazas se envíen
 langfuse_client.flush()
@@ -160,23 +202,70 @@ result = agent.analyze(
 print(result["analysis"])
 ```
 
-### ImageComparatorAgent
+### ContextualizationAgent
 
 ```python
-from agents import ImageComparatorAgent
+from agents import ContextualizationAgent
 from langfuse import Langfuse
 
-agent = ImageComparatorAgent(Langfuse())
+agent = ContextualizationAgent(Langfuse())
 
-result = agent.compare(
-    analysis_data={"analysis": "..."},
-    custom_prompt="Tu prompt aquí"
+# Usando análisis previos del ImageReaderAgent
+result = agent.build_context_map(
+    analysis_1,  # Análisis de imagen 1
+    analysis_2,  # Análisis de imagen 2
+    custom_prompt="Tu prompt personalizado"
 )
 
-print(result["comparison"])
+print(result["context_map"])
 ```
 
-### ImageComparisonWorkflow
+### TextExtractorAgent
+
+```python
+from agents import TextExtractorAgent
+from langfuse import Langfuse
+
+agent = TextExtractorAgent(Langfuse())
+
+result = agent.extract_text(
+    "image1.jpg",
+    "image2.jpg",
+    custom_prompt="Tu prompt personalizado"
+)
+
+print(result["text_1"])  # Texto del contrato 1
+print(result["text_2"])  # Texto del contrato 2
+```
+
+### ChangeExtractorAgent ✨ (NUEVO)
+
+```python
+from agents import ChangeExtractorAgent
+from langfuse import Langfuse
+
+agent = ChangeExtractorAgent(Langfuse())
+
+# Usando textos del TextExtractorAgent y mapa del ContextualizationAgent
+result = agent.extract_changes(
+    text_1="Texto del documento 1...",
+    text_2="Texto del documento 2...",
+    context_map=context_map_from_contextualization,
+    custom_prompt="Tu prompt personalizado"
+)
+
+# Acceder a cambios validados con Pydantic
+if result["status"] == "success":
+    changes = result["changes"]
+    print(f"Adiciones: {len(changes.additions)}")
+    print(f"Eliminaciones: {len(changes.deletions)}")
+    print(f"Modificaciones: {len(changes.modifications)}")
+    
+    for mod in changes.modifications:
+        print(f"  - {mod.section}: {mod.description}")
+```
+
+### ImageComparisonWorkflow (Actualizado)
 
 ```python
 from agents import ImageComparisonWorkflow
@@ -187,9 +276,17 @@ workflow = ImageComparisonWorkflow(Langfuse())
 result = workflow.process(
     "image1.jpg",
     "image2.jpg",
-    reader_prompt="Prompt para agente 1",
-    comparator_prompt="Prompt para agente 2"
+    reader_prompt="Prompt para agente 1 (opcional)",
+    contextualization_prompt="Prompt para agente 2 (opcional)",
+    text_extractor_prompt="Prompt para agente 3 (opcional)",
+    change_extractor_prompt="Prompt para agente 4 (opcional)"  # ✨ Nuevo
 )
+
+# Acceder a resultados de todos los agentes
+print(result["image_analysis"])       # Agente 1: Análisis de estructura
+print(result["context_map"])          # Agente 2: Mapa contextual
+print(result["extracted_text"])       # Agente 3: Texto extraído
+print(result["extracted_changes"])    # Agente 4: Cambios clasificados ✨
 ```
 
 ## 🎯 Mejores Prácticas Implementadas
@@ -197,25 +294,32 @@ result = workflow.process(
 ### ✅ Modularización
 - Cada agente es una clase independiente
 - Fácil de reutilizar y extender
+- Responsabilidades bien definidas
 
 ### ✅ Trazas Completas
 - Cada operación genera una traza en Langfuse
 - Seguimiento completo del flujo
+- Observabilidad de todas las llamadas a GPT-4o
+
+### ✅ Validación Estructurada
+- Modelos Pydantic para garantizar calidad
+- Validación de salidas de IA
+- Manejo de errores de validación
 
 ### ✅ Manejo Robusto de Errores
 - Validación de imágenes
 - Checks de status
-- Mensajes descriptivos
+- Mensajes descriptivos y accionables
 
 ### ✅ Configuración Flexible
 - Variables de entorno centralizadas
-- Prompts personalizables
-- Fácil de adaptar
+- Prompts personalizables por agente
+- Fácil de adaptar a nuevos casos de uso
 
 ### ✅ Codificación Segura
 - Base64 para transmisión de imágenes
 - Detección automática de MIME types
-- Soporte multi-formato
+- Soporte multi-formato (JPG, PNG, GIF, WebP)
 
 ## 🔐 Variables de Entorno
 
@@ -240,40 +344,54 @@ IMAGE_READ_TIMEOUT=30
 
 ## 📈 Casos de Uso
 
-### 1. Comparación de Screenshots
+### 1. Análisis de Contratos y Enmiendas
+```bash
+python example.py --image1 contrato_original.pdf --image2 contrato_enmienda.pdf
+```
+
+### 2. Comparación de Documentos Legales
+```bash
+python example.py --image1 acuerdo_v1.jpg --image2 acuerdo_v2.jpg
+```
+
+### 3. Análisis de Screenshots de Cambios
 ```bash
 python example.py --image1 before.png --image2 after.png
 ```
 
-### 2. Análisis de Documentos
-```bash
-python example.py --image1 page1.jpg --image2 page2.jpg
-```
-
-### 3. Control de Calidad de Productos
-```bash
-python example.py --image1 product_v1.jpg --image2 product_v2.jpg
-```
-
-### 4. Detección de Cambios
+### 4. Detección de Cambios en Mapas o Planos
 ```bash
 python example.py --image1 map_old.png --image2 map_new.png
 ```
 
+### 5. Comparación de Documentos Escaneados
+```bash
+python example.py --image1 documento_original.jpg --image2 documento_actualizado.jpg
+```
+
 ## 🛠️ Extensiones Futuras
 
-- [ ] Agregar más agentes especializados
-- [ ] Implementar caché de análisis
-- [ ] API REST con FastAPI
-- [ ] Procesamiento asincrónico con Celery
-- [ ] Webhooks para notificaciones
-- [ ] Soporte para URLs remotas de imágenes
-- [ ] Dashboard propio de visualización
-- [ ] Exportación a múltiples formatos
+- [ ] Agente de Generación de Reportes (5º agente) - Genera reportes formateados
+- [ ] Análisis de Impacto de Cambios - Clasifica criticidad de cambios
+- [ ] Sugerencias de Riesgos Legales - Identifica cambios potencialmente peligrosos
+- [ ] Caché de análisis previos - Evita re-analizar documentos idénticos
+- [ ] API REST con FastAPI - Expone agentes vía HTTP
+- [ ] Procesamiento asincrónico con Celery - Maneja solicitudes paralelas
+- [ ] Webhooks para notificaciones - Alertas de análisis completados
+- [ ] Soporte para URLs remotas de imágenes - URLs directas sin descargar
+- [ ] Dashboard propio de visualización - Interfaz web interactiva
+- [ ] Exportación a múltiples formatos - JSON, XML, PDF, Excel
+- [ ] Integración con bases de datos - Persistencia de análisis
+- [ ] Análisis de versiones múltiples - Seguimiento de cambios a través de versiones
 
 ## 📝 Documentación
 
-Para más información, consulta [USAGE.md](USAGE.md) para una guía detallada y ejemplos avanzados.
+Para más información, consulta:
+- [USAGE.md](USAGE.md) - Guía detallada de uso
+- [CONTEXTUALIZATION_GUIDE.md](CONTEXTUALIZATION_GUIDE.md) - Guía específica del ContextualizationAgent
+- [CHANGE_EXTRACTOR_GUIDE.md](CHANGE_EXTRACTOR_GUIDE.md) - Guía específica del ChangeExtractorAgent ✨ (NUEVO)
+- [LANGFUSE_GUIDE.md](LANGFUSE_GUIDE.md) - Guía de trazas y monitoreo
+- [QUICKSTART.md](QUICKSTART.md) - Inicio rápido
 
 ## 🤝 Contribuciones
 
@@ -292,8 +410,9 @@ Este proyecto está bajo licencia MIT. Ver archivo `LICENSE` para más detalles.
 
 - **Langfuse Docs**: https://docs.langfuse.com
 - **OpenAI Vision**: https://platform.openai.com/docs/guides/vision
+- **Pydantic**: https://docs.pydantic.dev
 - **LangChain**: https://python.langchain.com
 
 ---
 
-**Creado con ❤️ usando Langfuse + OpenAI + Python**
+**Creado con ❤️ usando Langfuse + OpenAI + Pydantic + Python**

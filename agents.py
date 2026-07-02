@@ -38,7 +38,7 @@ class ContractChangeOutput(BaseModel):
         }
 
 
-def parse_contract_image(image_path: str, image_label: str, custom_prompt: Optional[str] = None) -> dict:
+def parse_contract_image(image_path: str, image_label: str, custom_prompt: Optional[str] = None, trace_id: Optional[str] = None, langfuse_client: Optional[Langfuse] = None) -> dict:
     """
     Analiza una imagen de contrato y retorna detalles estructurados.
     
@@ -46,24 +46,37 @@ def parse_contract_image(image_path: str, image_label: str, custom_prompt: Optio
         image_path: Ruta a la imagen a analizar
         image_label: Etiqueta para identificar la imagen (ej: "imagen_1", "imagen_2")
         custom_prompt: Prompt personalizado (opcional)
+        trace_id: ID del trace de Langfuse (opcional)
+        langfuse_client: Cliente de Langfuse (opcional)
     
     Returns:
         Diccionario con el análisis de la imagen
     """
-    # Codificar imagen a base64
-    with open(image_path, "rb") as image_file:
-        image_base64 = base64.standard_b64encode(image_file.read()).decode("utf-8")
-    
-    # Obtener tipo MIME
-    extension = Path(image_path).suffix.lower()
-    media_types = {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".gif": "image/gif",
-        ".webp": "image/webp"
-    }
-    image_media_type = media_types.get(extension, "image/jpeg")
+    langfuse_client = langfuse_client or Langfuse()
+    # Span: Cargar y preparar imagen
+    trace_context = {"trace_id": trace_id} if trace_id else None
+    with langfuse_client.start_as_current_observation(
+        trace_context=trace_context,
+        name=f"load-image-{image_label}",
+        as_type="span",
+        input={"image_path": image_path, "image_label": image_label},
+        metadata={"type": "image_preparation"}
+    ) as span:
+        # Codificar imagen a base64
+        with open(image_path, "rb") as image_file:
+            image_base64 = base64.standard_b64encode(image_file.read()).decode("utf-8")
+        
+        # Obtener tipo MIME
+        extension = Path(image_path).suffix.lower()
+        media_types = {
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".gif": "image/gif",
+            ".webp": "image/webp"
+        }
+        image_media_type = media_types.get(extension, "image/jpeg")
+        span.update(output={"media_type": image_media_type, "size": len(image_base64)})
     
     # Usar prompt personalizado o por defecto
     if custom_prompt is None:
@@ -78,30 +91,40 @@ def parse_contract_image(image_path: str, image_label: str, custom_prompt: Optio
 
             Responde en formato JSON."""
     
-    # Llamar a OpenAI con capacidad de visión
-    response = openai.chat.completions.create(
-        name="parse-contract-image",
-        model="gpt-4o",
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": custom_prompt
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{image_media_type};base64,{image_base64}"
+    # Span: Análisis de imagen con GPT-4o vision
+    with langfuse_client.start_as_current_observation(
+        trace_context=trace_context,
+        name=f"analyze-image-{image_label}",
+        as_type="span",
+        input={"image_label": image_label, "prompt_length": len(custom_prompt)},
+        metadata={"type": "vision_analysis", "model": "gpt-4o"}
+    ) as span:
+        # Llamar a OpenAI con capacidad de visión
+        response = openai.chat.completions.create(
+            name=f"parse-contract-image-{image_label}",
+            trace_id=trace_id,
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": custom_prompt
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{image_media_type};base64,{image_base64}"
+                            }
                         }
-                    }
-                ]
-            }
-        ]
-    )
-    
-    analysis = response.choices[0].message.content
+                    ]
+                }
+            ]
+        )
+        
+        analysis = response.choices[0].message.content
+        span.update(output={"analysis_length": len(analysis), "model": "gpt-4o"})
     
     return {
         "label": image_label,
@@ -116,7 +139,7 @@ class ImageReaderAgent:
     def __init__(self, langfuse_client: Optional[Langfuse] = None):
         self.langfuse_client = langfuse_client or Langfuse()
     
-    def analyze(self, image_path_1: str, image_path_2: str, custom_prompt: Optional[str] = None) -> dict:
+    def analyze(self, image_path_1: str, image_path_2: str, custom_prompt: Optional[str] = None, trace_id: Optional[str] = None) -> dict:
         """
         Analiza dos imágenes ejecutando parse_contract_image para cada una.
         
@@ -124,15 +147,27 @@ class ImageReaderAgent:
             image_path_1: Ruta a la primera imagen
             image_path_2: Ruta a la segunda imagen
             custom_prompt: Prompt personalizado (opcional)
+            trace_id: ID del trace de Langfuse (opcional)
         
         Returns:
             Diccionario con el análisis de ambas imágenes
         """
-        # Ejecutar parse_contract_image para la primera imagen
-        analysis_1 = parse_contract_image(image_path_1, "imagen_1", custom_prompt)
-        
-        # Ejecutar parse_contract_image para la segunda imagen
-        analysis_2 = parse_contract_image(image_path_2, "imagen_2", custom_prompt)
+        # Span principal: Análisis de imágenes
+        trace_context = {"trace_id": trace_id} if trace_id else None
+        with self.langfuse_client.start_as_current_observation(
+            trace_context=trace_context,
+            name="image-reader-analyze",
+            as_type="span",
+            input={"image_path_1": image_path_1, "image_path_2": image_path_2},
+            metadata={"type": "agent_operation", "agent": "ImageReaderAgent"}
+        ) as reader_span:
+            # Ejecutar parse_contract_image para la primera imagen
+            analysis_1 = parse_contract_image(image_path_1, "imagen_1", custom_prompt, trace_id, self.langfuse_client)
+            
+            # Ejecutar parse_contract_image para la segunda imagen
+            analysis_2 = parse_contract_image(image_path_2, "imagen_2", custom_prompt, trace_id, self.langfuse_client)
+            
+            reader_span.update(output={"analysis_1_length": len(str(analysis_1)), "analysis_2_length": len(str(analysis_2))})
         
         # Combinar análisis
         combined_analysis = {
@@ -155,7 +190,7 @@ class TextExtractorAgent:
     def __init__(self, langfuse_client: Optional[Langfuse] = None):
         self.langfuse_client = langfuse_client or Langfuse()
     
-    def extract_text(self, image_path_1: str, image_path_2: str, custom_prompt: Optional[str] = None) -> dict:
+    def extract_text(self, image_path_1: str, image_path_2: str, custom_prompt: Optional[str] = None, trace_id: Optional[str] = None) -> dict:
         """
         Extrae el texto completo de dos imágenes de contrato usando vision.
         
@@ -163,98 +198,130 @@ class TextExtractorAgent:
             image_path_1: Ruta a la primera imagen
             image_path_2: Ruta a la segunda imagen
             custom_prompt: Prompt personalizado (opcional)
+            trace_id: ID del trace de Langfuse (opcional)
         
         Returns:
             Diccionario con el texto extraído de ambos contratos
         """
-        # Usar prompt personalizado o por defecto
-        if custom_prompt is None:
-            custom_prompt = """Extrae el texto COMPLETO del contrato/documento de esta imagen de forma fiel y precisa.
-            
-            Requisitos:
-            1. Captura TODO el texto visible, manteniendo la estructura original
-            2. Preserva párrafos, listas numeradas y viñetas
-            3. Incluye títulos de secciones y subsecciones
-            4. Mantén la puntuación y formato original
-            5. Si hay tablas, representa su estructura con separadores claros
-            6. Si hay texto parcialmente legible, indica con [texto parcial] o [ilegible]
+        # Span principal: Extracción de texto
+        trace_context = {"trace_id": trace_id} if trace_id else None
+        with self.langfuse_client.start_as_current_observation(
+            trace_context=trace_context,
+            name="text-extractor-extract",
+            as_type="span",
+            input={"image_path_1": image_path_1, "image_path_2": image_path_2},
+            metadata={"type": "agent_operation", "agent": "TextExtractorAgent"}
+        ) as extractor_span:
+            # Usar prompt personalizado o por defecto
+            if custom_prompt is None:
+                custom_prompt = """Extrae el texto COMPLETO del contrato/documento de esta imagen de forma fiel y precisa.
+                
+                Requisitos:
+                1. Captura TODO el texto visible, manteniendo la estructura original
+                2. Preserva párrafos, listas numeradas y viñetas
+                3. Incluye títulos de secciones y subsecciones
+                4. Mantén la puntuación y formato original
+                5. Si hay tablas, representa su estructura con separadores claros
+                6. Si hay texto parcialmente legible, indica con [texto parcial] o [ilegible]
 
-            Responde SOLO con el texto extraído, sin comentarios adicionales."""
+                Responde SOLO con el texto extraído, sin comentarios adicionales."""
+            
+            # Span: Extracción de texto de imagen 1
+            with self.langfuse_client.start_as_current_observation(
+                trace_context=trace_context,
+                name="extract-text-image-1",
+                as_type="span",
+                input={"image_path": image_path_1},
+                metadata={"type": "vision_extraction"}
+            ) as span_1:
+                # Extraer texto de la primera imagen
+                with open(image_path_1, "rb") as image_file:
+                    image_1_base64 = base64.standard_b64encode(image_file.read()).decode("utf-8")
         
-        # Extraer texto de la primera imagen
-        with open(image_path_1, "rb") as image_file:
-            image_1_base64 = base64.standard_b64encode(image_file.read()).decode("utf-8")
-        
-        extension_1 = Path(image_path_1).suffix.lower()
-        media_types = {
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".png": "image/png",
-            ".gif": "image/gif",
-            ".webp": "image/webp"
-        }
-        media_type_1 = media_types.get(extension_1, "image/jpeg")
-        
-        response_1 = openai.chat.completions.create(
-            name="extract-contract-text-1",
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
+                extension_1 = Path(image_path_1).suffix.lower()
+                media_types = {
+                    ".jpg": "image/jpeg",
+                    ".jpeg": "image/jpeg",
+                    ".png": "image/png",
+                    ".gif": "image/gif",
+                    ".webp": "image/webp"
+                }
+                media_type_1 = media_types.get(extension_1, "image/jpeg")
+                
+                response_1 = openai.chat.completions.create(
+                    name="extract-contract-text-1",
+                    trace_id=trace_id,
+                    model="gpt-4o",
+                    messages=[
                         {
-                            "type": "text",
-                            "text": custom_prompt
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:{media_type_1};base64,{image_1_base64}"
-                            }
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": custom_prompt
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:{media_type_1};base64,{image_1_base64}"
+                                    }
+                                }
+                            ]
                         }
                     ]
-                }
-            ]
-        )
-        
-        text_1 = response_1.choices[0].message.content
-        
-        # Extraer texto de la segunda imagen
-        with open(image_path_2, "rb") as image_file:
-            image_2_base64 = base64.standard_b64encode(image_file.read()).decode("utf-8")
-        
-        extension_2 = Path(image_path_2).suffix.lower()
-        media_type_2 = media_types.get(extension_2, "image/jpeg")
-        
-        response_2 = openai.chat.completions.create(
-            name="extract-contract-text-2",
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
+                )
+                
+                text_1 = response_1.choices[0].message.content
+                span_1.update(output={"text_length": len(text_1), "model": "gpt-4o"})
+            
+            # Span: Extracción de texto de imagen 2
+            with self.langfuse_client.start_as_current_observation(
+                trace_context=trace_context,
+                name="extract-text-image-2",
+                as_type="span",
+                input={"image_path": image_path_2},
+                metadata={"type": "vision_extraction"}
+            ) as span_2:
+                # Extraer texto de la segunda imagen
+                with open(image_path_2, "rb") as image_file:
+                    image_2_base64 = base64.standard_b64encode(image_file.read()).decode("utf-8")
+                
+                extension_2 = Path(image_path_2).suffix.lower()
+                media_type_2 = media_types.get(extension_2, "image/jpeg")
+                
+                response_2 = openai.chat.completions.create(
+                    name="extract-contract-text-2",
+                    trace_id=trace_id,
+                    model="gpt-4o",
+                    messages=[
                         {
-                            "type": "text",
-                            "text": custom_prompt
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:{media_type_2};base64,{image_2_base64}"
-                            }
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": custom_prompt
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:{media_type_2};base64,{image_2_base64}"
+                                    }
+                                }
+                            ]
                         }
                     ]
-                }
-            ]
-        )
+                )
+                
+                text_2 = response_2.choices[0].message.content
+                span_2.update(output={"text_length": len(text_2), "model": "gpt-4o"})
+            
+            extractor_span.update(output={"text_1_length": len(text_1), "text_2_length": len(text_2)})
         
-        text_2 = response_2.choices[0].message.content
-        
-        return {
-            "status": "success",
-            "text_1": text_1,
-            "text_2": text_2
-        }
+            return {
+                "status": "success",
+                "text_1": text_1,
+                "text_2": text_2
+            }
 
 
 class ChangeExtractorAgent:
@@ -268,7 +335,8 @@ class ChangeExtractorAgent:
         text_1: str, 
         text_2: str,
         context_map: Optional[str] = None,
-        custom_prompt: Optional[str] = None
+        custom_prompt: Optional[str] = None,
+        trace_id: Optional[str] = None
     ) -> dict:
         """
         Identifica, aísla y describe cada cambio entre dos textos.
@@ -279,6 +347,7 @@ class ChangeExtractorAgent:
             text_2: Texto del documento con enmienda
             context_map: Mapa contextual del ContextualizationAgent (opcional)
             custom_prompt: Prompt personalizado (opcional)
+            trace_id: ID del trace de Langfuse (opcional)
         
         Returns:
             Diccionario con cambios estructurados y validados
@@ -318,59 +387,90 @@ El resumen debe ser texto narrativo claro, no JSON.
 4. El JSON debe ser válido y parseable
 5. No incluyas comentarios fuera del JSON"""
         
-        # Llamar a OpenAI para extraer cambios
-        response = openai.chat.completions.create(
-            name="extract-changes",
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Eres un experto en análisis de cambios en documentos. Tu tarea es identificar, aislar y clasificar cada cambio entre dos versiones de un documento. Debes ser exhaustivo y preciso."
-                },
-                {
-                    "role": "user",
-                    "content": custom_prompt
-                }
-            ]
-        )
-        
-        changes_text = response.choices[0].message.content
-        
-        # Parsear respuesta JSON
-        try:
-            # Intentar extraer JSON si está envuelto en markdown
-            if "```json" in changes_text:
-                start = changes_text.find("```json") + 7
-                end = changes_text.find("```", start)
-                changes_text = changes_text[start:end].strip()
-            elif "```" in changes_text:
-                start = changes_text.find("```") + 3
-                end = changes_text.find("```", start)
-                changes_text = changes_text[start:end].strip()
+        # Span principal: Extracción de cambios
+        trace_context = {"trace_id": trace_id} if trace_id else None
+        with self.langfuse_client.start_as_current_observation(
+            trace_context=trace_context,
+            name="change-extractor-extract-changes",
+            as_type="span",
+            input={"text_1_length": len(text_1), "text_2_length": len(text_2)},
+            metadata={"type": "agent_operation", "agent": "ChangeExtractorAgent"}
+        ) as extractor_span:
+            # Llamar a OpenAI para extraer cambios (autotraced por langfuse.openai)
+            response = openai.chat.completions.create(
+                name="extract-changes",
+                trace_id=trace_id,
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Eres un experto en análisis de cambios en documentos. Tu tarea es identificar, aislar y clasificar cada cambio entre dos versiones de un documento. Debes ser exhaustivo y preciso."
+                    },
+                    {
+                        "role": "user",
+                        "content": custom_prompt
+                    }
+                ]
+            )
             
-            changes_dict = json.loads(changes_text)
-        except json.JSONDecodeError:
-            return {
-                "status": "error",
-                "error": "No se pudo parsear la respuesta como JSON válido",
-                "raw_response": changes_text
-            }
-        
-        # Validar con Pydantic
-        try:
-            validated_changes = ContractChangeOutput(**changes_dict)
-            return {
-                "status": "success",
-                "changes": validated_changes.model_dump(),
-                "validated": True
-            }
-        except Exception as e:
-            return {
-                "status": "validation_error",
-                "error": str(e),
-                "changes": changes_dict,
-                "validated": False
-            }
+            changes_text = response.choices[0].message.content
+            
+            # Span: Parsing de JSON
+            with self.langfuse_client.start_as_current_observation(
+                trace_context=trace_context,
+                name="parse-json-response",
+                as_type="span",
+                input={"raw_response_length": len(changes_text)},
+                metadata={"type": "json_processing"}
+            ) as parse_span:
+                try:
+                    # Intentar extraer JSON si está envuelto en markdown
+                    if "```json" in changes_text:
+                        start = changes_text.find("```json") + 7
+                        end = changes_text.find("```", start)
+                        changes_text = changes_text[start:end].strip()
+                    elif "```" in changes_text:
+                        start = changes_text.find("```") + 3
+                        end = changes_text.find("```", start)
+                        changes_text = changes_text[start:end].strip()
+                    
+                    changes_dict = json.loads(changes_text)
+                    parse_span.update(output={"parsed_keys": list(changes_dict.keys())})
+                except json.JSONDecodeError as e:
+                    parse_span.update(output={"status": "error", "error": str(e)})
+                    extractor_span.update(output={"status": "error", "error": str(e)})
+                    return {
+                        "status": "error",
+                        "error": "No se pudo parsear la respuesta como JSON válido",
+                        "raw_response": changes_text
+                    }
+            
+            # Span: Validación Pydantic
+            with self.langfuse_client.start_as_current_observation(
+                trace_context=trace_context,
+                name="validate-pydantic-model",
+                as_type="span",
+                input={"model": "ContractChangeOutput", "fields": list(changes_dict.keys())},
+                metadata={"type": "validation"}
+            ) as validation_span:
+                try:
+                    validated_changes = ContractChangeOutput(**changes_dict)
+                    validation_span.update(output={"status": "success", "validated": True})
+                    extractor_span.update(output={"status": "success", "changes_count": len(changes_dict)})
+                    return {
+                        "status": "success",
+                        "changes": validated_changes.model_dump(),
+                        "validated": True
+                    }
+                except Exception as e:
+                    validation_span.update(output={"status": "validation_error", "error": str(e)})
+                    extractor_span.update(output={"status": "validation_error", "error": str(e)})
+                    return {
+                        "status": "validation_error",
+                        "error": str(e),
+                        "changes": changes_dict,
+                        "validated": False
+                    }
 
 
 class ContextualizationAgent:
@@ -379,7 +479,7 @@ class ContextualizationAgent:
     def __init__(self, langfuse_client: Optional[Langfuse] = None):
         self.langfuse_client = langfuse_client or Langfuse()
     
-    def build_context_map(self, analysis_1: str, analysis_2: str, custom_prompt: Optional[str] = None) -> dict:
+    def build_context_map(self, analysis_1: str, analysis_2: str, custom_prompt: Optional[str] = None, trace_id: Optional[str] = None) -> dict:
         """
         Analiza la estructura comparada de dos documentos y construye un mapa contextual.
         
@@ -387,6 +487,7 @@ class ContextualizationAgent:
             analysis_1: Análisis parseado del primer documento
             analysis_2: Análisis parseado del segundo documento
             custom_prompt: Prompt personalizado (opcional)
+            trace_id: ID del trace de Langfuse (opcional)
         
         Returns:
             Diccionario con el mapa contextual estructurado
@@ -429,28 +530,39 @@ Responde en formato JSON con la siguiente estructura:
     "mapa_de_relaciones": "descripción de cómo se relacionan las estructuras"
 }}"""
         
-        # Llamar a OpenAI para el análisis contextual
-        response = openai.chat.completions.create(
-            name="build-context-map",
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Eres un experto en análisis de estructura de documentos. Tu tarea es identificar la estructura, secciones y contexto de documentos para construir mapas conceptuales. No analices cambios de contenido, solo estructura y correspondencias."
-                },
-                {
-                    "role": "user",
-                    "content": custom_prompt
-                }
-            ]
-        )
+        # Span principal: Construcción del mapa contextual
+        trace_context = {"trace_id": trace_id} if trace_id else None
+        with self.langfuse_client.start_as_current_observation(
+            trace_context=trace_context,
+            name="contextualization-build-context-map",
+            as_type="span",
+            input={"analysis_1_length": len(analysis_1), "analysis_2_length": len(analysis_2)},
+            metadata={"type": "agent_operation", "agent": "ContextualizationAgent"}
+        ) as context_span:
+            # Llamar a OpenAI para el análisis contextual (autotraced por langfuse.openai)
+            response = openai.chat.completions.create(
+                name="build-context-map",
+                trace_id=trace_id,
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Eres un experto en análisis de estructura de documentos. Tu tarea es identificar la estructura, secciones y contexto de documentos para construir mapas conceptuales. No analices cambios de contenido, solo estructura y correspondencias."
+                    },
+                    {
+                        "role": "user",
+                        "content": custom_prompt
+                    }
+                ]
+            )
+            
+            context_map = response.choices[0].message.content
+            context_span.update(output={"context_map_length": len(context_map)})
         
-        context_map = response.choices[0].message.content
-        
-        return {
-            "status": "success",
-            "context_map": context_map
-        }
+            return {
+                "status": "success",
+                "context_map": context_map
+            }
 
 
 
@@ -493,56 +605,76 @@ class ImageComparisonWorkflow:
         """
         # Crear un trace ID para toda la sesión
         trace_id = self.langfuse_client.create_trace_id()
+        trace_context = {"trace_id": trace_id}
         
-        # Paso 1: Agente Lector - Analizar ambas imágenes
-        analysis_result = self.reader_agent.analyze(
-            image_path_1,
-            image_path_2,
-            reader_prompt
-        )
+        # Span principal: Workflow completo
+        with self.langfuse_client.start_as_current_observation(
+            trace_context=trace_context,
+            name="image-comparison-workflow",
+            as_type="span",
+            input={"image_path_1": image_path_1, "image_path_2": image_path_2},
+            metadata={"type": "workflow", "version": "4-agents"}
+        ) as workflow_span:
         
-        if analysis_result["status"] != "success":
-            return {"error": "Reader agent failed"}
-        
-        # Extraer análisis individuales para pasar al siguiente agente
-        try:
-            analysis_dict = eval(analysis_result["analysis"])
-            analysis_1 = analysis_dict.get("imagen_1", "")
-            analysis_2 = analysis_dict.get("imagen_2", "")
-        except:
-            analysis_1 = analysis_result["analysis"]
-            analysis_2 = analysis_result["analysis"]
-        
-        # Paso 2: Agente Contextualizador - Construir mapa contextual
-        contextualization_result = self.contextualization_agent.build_context_map(
-            analysis_1,
-            analysis_2,
-            contextualization_prompt
-        )
-        
-        if contextualization_result["status"] != "success":
-            return {"error": "Contextualization agent failed"}
-        
-        # Paso 3: Agente Extractor de Texto - Extraer texto completo de contratos
-        text_extraction_result = self.text_extractor_agent.extract_text(
-            image_path_1,
-            image_path_2,
-            text_extractor_prompt
-        )
-        
-        if text_extraction_result["status"] != "success":
-            return {"error": "Text extractor agent failed"}
-        
-        # Paso 4: Agente Extractor de Cambios - Identificar y clasificar cambios
-        change_extraction_result = self.change_extractor_agent.extract_changes(
-            text_extraction_result["text_1"],
-            text_extraction_result["text_2"],
-            contextualization_result["context_map"],
-            change_extractor_prompt
-        )
-        
-        if change_extraction_result["status"] not in ["success", "validation_error"]:
-            return {"error": "Change extractor agent failed"}
+            # Paso 1: Agente Lector - Analizar ambas imágenes
+            analysis_result = self.reader_agent.analyze(
+                image_path_1,
+                image_path_2,
+                reader_prompt,
+                trace_id
+            )
+            
+            if analysis_result["status"] != "success":
+                workflow_span.update(output={"status": "error", "failed_at": "reader_agent"})
+                return {"error": "Reader agent failed"}
+            
+            # Extraer análisis individuales para pasar al siguiente agente
+            try:
+                analysis_dict = eval(analysis_result["analysis"])
+                analysis_1 = analysis_dict.get("imagen_1", "")
+                analysis_2 = analysis_dict.get("imagen_2", "")
+            except:
+                analysis_1 = analysis_result["analysis"]
+                analysis_2 = analysis_result["analysis"]
+            
+            # Paso 2: Agente Contextualizador - Construir mapa contextual
+            contextualization_result = self.contextualization_agent.build_context_map(
+                analysis_1,
+                analysis_2,
+                contextualization_prompt,
+                trace_id
+            )
+            
+            if contextualization_result["status"] != "success":
+                workflow_span.update(output={"status": "error", "failed_at": "contextualization_agent"})
+                return {"error": "Contextualization agent failed"}
+            
+            # Paso 3: Agente Extractor de Texto - Extraer texto completo de contratos
+            text_extraction_result = self.text_extractor_agent.extract_text(
+                image_path_1,
+                image_path_2,
+                text_extractor_prompt,
+                trace_id
+            )
+            
+            if text_extraction_result["status"] != "success":
+                workflow_span.update(output={"status": "error", "failed_at": "text_extractor_agent"})
+                return {"error": "Text extractor agent failed"}
+            
+            # Paso 4: Agente Extractor de Cambios - Identificar y clasificar cambios
+            change_extraction_result = self.change_extractor_agent.extract_changes(
+                text_extraction_result["text_1"],
+                text_extraction_result["text_2"],
+                contextualization_result["context_map"],
+                change_extractor_prompt,
+                trace_id
+            )
+            
+            if change_extraction_result["status"] not in ["success", "validation_error"]:
+                workflow_span.update(output={"status": "error", "failed_at": "change_extractor_agent"})
+                return {"error": "Change extractor agent failed"}
+            
+            workflow_span.update(output={"status": "success", "agents_executed": 4})
         
         return {
             "status": "success",
