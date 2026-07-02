@@ -1,0 +1,3 @@
+# Imagenes generadas por generate_data.py (regenerables, no se versionan).
+# Los expected.json (golden cases) SI se versionan.
+*.png

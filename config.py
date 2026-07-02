@@ -4,7 +4,6 @@ Configuración central para la aplicación de comparación de imágenes.
 
 import os
 from pathlib import Path
-from typing import Optional
 
 # Directorios
 PROJECT_ROOT = Path(__file__).parent
@@ -18,20 +17,21 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 # Configuración de Langfuse
 LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
 LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
-LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+LANGFUSE_BASE_URL = os.getenv("LANGFUSE_BASE_URL", "https://cloud.langfuse.com")
+LANGFUSE_PROJECT_ID = os.getenv("LANGFUSE_PROJECT_ID", "")
+LANGFUSE_PROJECT_URL = (
+    f"{LANGFUSE_BASE_URL}/projects/{LANGFUSE_PROJECT_ID}" if LANGFUSE_PROJECT_ID else ""
+)
 
 # Configuración de OpenAI
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 
 # Configuración de modelos de IA
-IMAGE_ANALYSIS_MODEL = OPENAI_MODEL
-IMAGE_COMPARISON_MODEL = OPENAI_MODEL
+OPENAI_VISION_MODEL = os.getenv("OPENAI_VISION_MODEL", "gpt-4o")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
 # Formatos soportados de imágenes
-SUPPORTED_IMAGE_FORMATS = {
-    ".jpg", ".jpeg", ".png", ".gif", ".webp"
-}
+SUPPORTED_IMAGE_FORMATS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
 # Prompts por defecto
 DEFAULT_READER_PROMPT = """Analiza estas dos imágenes de forma detallada. 
@@ -65,39 +65,40 @@ ENABLE_TRACE_LOGGING = os.getenv("ENABLE_TRACE_LOGGING", "True").lower() == "tru
 OPENAI_TIMEOUT = int(os.getenv("OPENAI_TIMEOUT", "60"))
 IMAGE_READ_TIMEOUT = int(os.getenv("IMAGE_READ_TIMEOUT", "30"))
 
+
 # Validaciones
 def validate_configuration() -> dict:
     """Valida que todas las configuraciones necesarias estén presentes."""
     errors = []
     warnings = []
-    
+
     if not OPENAI_API_KEY:
         errors.append("OPENAI_API_KEY no está configurada")
-    
+
     if not LANGFUSE_PUBLIC_KEY:
-        warnings.append("LANGFUSE_PUBLIC_KEY no está configurada - las trazas no se enviarán")
-    
+        warnings.append(
+            "LANGFUSE_PUBLIC_KEY no está configurada - las trazas no se enviarán"
+        )
+
     if not LANGFUSE_SECRET_KEY:
-        warnings.append("LANGFUSE_SECRET_KEY no está configurada - las trazas no se enviarán")
-    
-    return {
-        "errors": errors,
-        "warnings": warnings,
-        "is_valid": len(errors) == 0
-    }
+        warnings.append(
+            "LANGFUSE_SECRET_KEY no está configurada - las trazas no se enviarán"
+        )
+
+    return {"errors": errors, "warnings": warnings, "is_valid": len(errors) == 0}
 
 
 def get_image_media_type(image_path: str) -> str:
     """Obtiene el tipo MIME de una imagen."""
     from pathlib import Path
-    
+
     extension = Path(image_path).suffix.lower()
     media_types = {
         ".jpg": "image/jpeg",
         ".jpeg": "image/jpeg",
         ".png": "image/png",
         ".gif": "image/gif",
-        ".webp": "image/webp"
+        ".webp": "image/webp",
     }
     return media_types.get(extension, "image/jpeg")
 
@@ -105,19 +106,19 @@ def get_image_media_type(image_path: str) -> str:
 def is_valid_image(image_path: str) -> bool:
     """Verifica si el archivo es una imagen válida."""
     from pathlib import Path
-    
+
     path = Path(image_path)
-    
+
     # Verificar que el archivo existe
     if not path.exists():
         return False
-    
+
     # Verificar que tiene extensión válida
     if path.suffix.lower() not in SUPPORTED_IMAGE_FORMATS:
         return False
-    
+
     # Verificar que es un archivo (no directorio)
     if not path.is_file():
         return False
-    
+
     return True
