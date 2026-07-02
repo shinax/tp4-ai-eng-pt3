@@ -31,7 +31,7 @@ pip install -r requirements.txt
 
 ### 2. Configuración
 
-Asegúrate de que el archivo `.env` contiene:
+Asegúrate de que el archivo `.env` contenga:
 
 ```env
 OPENAI_API_KEY=sk-...
@@ -60,17 +60,17 @@ python example.py --image1 doc1.jpg --image2 doc2.jpg --reader-prompt "Enfócate
 ├── config.py                  # Configuración centralizada
 ├── utils.py                   # Utilidades y formateadores
 ├── example.py                 # Script CLI de ejemplos
-├── test_app.py               # Script de pruebas
+├── test_app.py                # Script de pruebas
 ├── requirements.txt           # Dependencias
-├── USAGE.md                  # Documentación detallada
-└── .env                      # Variables de entorno
+├── USAGE.md                   # Documentación detallada
+└── .env                       # Variables de entorno
 ```
 
 ## 🏗️ Arquitectura de Agentes (4 Agentes)
 
 ```
 ┌──────────────────────────────────────────────┐
-│         IMAGEN 1  │  IMAGEN 2                │
+│     IMAGEN 1       │       IMAGEN 2          │
 └────────┬──────────────────────┬──────────────┘
          │                      │
     ┌────▼──────────────────────▼──────────────┐
@@ -81,42 +81,42 @@ python example.py --image1 doc1.jpg --image2 doc2.jpg --reader-prompt "Enfócate
     │   ▪ Genera análisis detallado            │
     └────┬─────────────────────────────────────┘
          │
-    ┌────▼──────────────────────────────────────┐
-    │ AGENTE 2: ContextualizationAgent          │
+    ┌────▼─────────────────────────────────────┐
+    │ AGENTE 2: ContextualizationAgent         │
     │ ▪ Mapea estructura comparada             │
     │ ▪ Identifica secciones equivalentes      │
     │ ▪ Establece correspondencias             │
-    │ ▪ Analiza cambios estructurales         │
+    │ ▪ Analiza cambios estructurales          │
     │ ▪ Propone mapa de relaciones             │
-    └────┬──────────────────────────────────────┘
+    └────┬─────────────────────────────────────┘
          │
-    ┌────▼──────────────────────────────────────┐
+    ┌────▼─────────────────────────────────────┐
     │ AGENTE 3: TextExtractorAgent             │
     │ ▪ Extrae texto completo de imágenes      │
     │ ▪ Mantiene estructura original           │
     │ ▪ Preserva formato y puntuación          │
     │ ▪ Marca secciones ilegibles              │
     │ ▪ Prepara texto para análisis            │
-    └────┬──────────────────────────────────────┘
+    └────┬─────────────────────────────────────┘
          │
-    ┌────▼──────────────────────────────────────┐
-    │ AGENTE 4: ChangeExtractorAgent ✨        │
+    ┌────▼─────────────────────────────────────┐
+    │ AGENTE 4: ChangeExtractorAgent           │
     │ ▪ Identifica cambios específicos         │
     │ ▪ Clasifica en adiciones/eliminaciones   │
     │ ▪ Detecta modificaciones                 │
     │ ▪ Describe razones de cambios            │
-    │ ▪ Valida con modelos Pydantic           │
-    │ ▪ Retorna JSON estructurado             │
-    └────┬──────────────────────────────────────┘
+    │ ▪ Valida con modelos Pydantic            │
+    │ ▪ Retorna JSON estructurado              │
+    └────┬─────────────────────────────────────┘
          │
-    ┌────▼──────────────────────────────────────┐
-    │   SALIDA FINAL                            │
+    ┌────▼─────────────────────────────────────┐
+    │   SALIDA FINAL                           │
     │ ▪ Análisis de estructura                 │
     │ ▪ Mapa contextual                        │
     │ ▪ Texto extraído (ambos documentos)      │
-    │ ▪ Cambios clasificados ✨               │
+    │ ▪ Cambios clasificados                   │
     │ ▪ Listo para reportes/acción             │
-    └───────────────────────────────────────────┘
+    └──────────────────────────────────────────┘
 ```
 
 ## 💻 Ejemplos de Uso
@@ -159,7 +159,7 @@ print("Contexto:", result["context_map"]["context_map"])
 print("Texto 1:", result["extracted_text"]["text_1"])
 print("Texto 2:", result["extracted_text"]["text_2"])
 
-# ✨ Nuevo: Acceder a cambios clasificados
+#  Acceder a cambios clasificados
 changes = result["extracted_changes"]["changes"]
 print(f"\nAdiciones detectadas: {len(changes.additions)}")
 for addition in changes.additions:
@@ -238,7 +238,7 @@ print(result["text_1"])  # Texto del contrato 1
 print(result["text_2"])  # Texto del contrato 2
 ```
 
-### ChangeExtractorAgent ✨ (NUEVO)
+### ChangeExtractorAgent 
 
 ```python
 from agents import ChangeExtractorAgent
@@ -265,7 +265,7 @@ if result["status"] == "success":
         print(f"  - {mod.section}: {mod.description}")
 ```
 
-### ImageComparisonWorkflow (Actualizado)
+### ImageComparisonWorkflow
 
 ```python
 from agents import ImageComparisonWorkflow
@@ -279,14 +279,14 @@ result = workflow.process(
     reader_prompt="Prompt para agente 1 (opcional)",
     contextualization_prompt="Prompt para agente 2 (opcional)",
     text_extractor_prompt="Prompt para agente 3 (opcional)",
-    change_extractor_prompt="Prompt para agente 4 (opcional)"  # ✨ Nuevo
+    change_extractor_prompt="Prompt para agente 4 (opcional)"
 )
 
 # Acceder a resultados de todos los agentes
 print(result["image_analysis"])       # Agente 1: Análisis de estructura
 print(result["context_map"])          # Agente 2: Mapa contextual
 print(result["extracted_text"])       # Agente 3: Texto extraído
-print(result["extracted_changes"])    # Agente 4: Cambios clasificados ✨
+print(result["extracted_changes"])    # Agente 4: Cambios clasificados
 ```
 
 ## 🎯 Mejores Prácticas Implementadas
@@ -340,79 +340,3 @@ ENABLE_TRACE_LOGGING=true
 # Timeouts (segundos)
 OPENAI_TIMEOUT=60
 IMAGE_READ_TIMEOUT=30
-```
-
-## 📈 Casos de Uso
-
-### 1. Análisis de Contratos y Enmiendas
-```bash
-python example.py --image1 contrato_original.pdf --image2 contrato_enmienda.pdf
-```
-
-### 2. Comparación de Documentos Legales
-```bash
-python example.py --image1 acuerdo_v1.jpg --image2 acuerdo_v2.jpg
-```
-
-### 3. Análisis de Screenshots de Cambios
-```bash
-python example.py --image1 before.png --image2 after.png
-```
-
-### 4. Detección de Cambios en Mapas o Planos
-```bash
-python example.py --image1 map_old.png --image2 map_new.png
-```
-
-### 5. Comparación de Documentos Escaneados
-```bash
-python example.py --image1 documento_original.jpg --image2 documento_actualizado.jpg
-```
-
-## 🛠️ Extensiones Futuras
-
-- [ ] Agente de Generación de Reportes (5º agente) - Genera reportes formateados
-- [ ] Análisis de Impacto de Cambios - Clasifica criticidad de cambios
-- [ ] Sugerencias de Riesgos Legales - Identifica cambios potencialmente peligrosos
-- [ ] Caché de análisis previos - Evita re-analizar documentos idénticos
-- [ ] API REST con FastAPI - Expone agentes vía HTTP
-- [ ] Procesamiento asincrónico con Celery - Maneja solicitudes paralelas
-- [ ] Webhooks para notificaciones - Alertas de análisis completados
-- [ ] Soporte para URLs remotas de imágenes - URLs directas sin descargar
-- [ ] Dashboard propio de visualización - Interfaz web interactiva
-- [ ] Exportación a múltiples formatos - JSON, XML, PDF, Excel
-- [ ] Integración con bases de datos - Persistencia de análisis
-- [ ] Análisis de versiones múltiples - Seguimiento de cambios a través de versiones
-
-## 📝 Documentación
-
-Para más información, consulta:
-- [USAGE.md](USAGE.md) - Guía detallada de uso
-- [CONTEXTUALIZATION_GUIDE.md](CONTEXTUALIZATION_GUIDE.md) - Guía específica del ContextualizationAgent
-- [CHANGE_EXTRACTOR_GUIDE.md](CHANGE_EXTRACTOR_GUIDE.md) - Guía específica del ChangeExtractorAgent ✨ (NUEVO)
-- [LANGFUSE_GUIDE.md](LANGFUSE_GUIDE.md) - Guía de trazas y monitoreo
-- [QUICKSTART.md](QUICKSTART.md) - Inicio rápido
-
-## 🤝 Contribuciones
-
-Las contribuciones son bienvenidas. Por favor:
-1. Fork el proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
-
-## 📄 Licencia
-
-Este proyecto está bajo licencia MIT. Ver archivo `LICENSE` para más detalles.
-
-## 📞 Soporte
-
-- **Langfuse Docs**: https://docs.langfuse.com
-- **OpenAI Vision**: https://platform.openai.com/docs/guides/vision
-- **Pydantic**: https://docs.pydantic.dev
-- **LangChain**: https://python.langchain.com
-
----
-
-**Creado con ❤️ usando Langfuse + OpenAI + Pydantic + Python**
