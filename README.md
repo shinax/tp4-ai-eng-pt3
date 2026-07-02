@@ -37,7 +37,7 @@ Asegúrate de que el archivo `.env` contenga las variables necesarias, hay un ej
 python main.py
 
 # Opción 2: Con contratos reales
-python main.py --original_path ./examples/documento_1__original.jpg --amendment_path ./examples/documento_1__enmienda.jpg
+python main.py -original_path="./examples/documento_1__original.jpg" -amendment_path="./examples/documento_1__enmienda.jpg"
 ```
 
 ## 📚 Estructura del Proyecto
@@ -116,3 +116,9 @@ Después de ejecutar, accede a tu dashboard en https://cloud.langfuse.com para v
 - Base64 para transmisión de imágenes
 - Detección automática de MIME types
 - Soporte multi-formato (JPG, PNG, GIF, WebP)
+
+
+## ✨ Detalles
+- En un momento me olvidé de pasarle los resultados de los parseos de las imágenes al ContextualizationAgent y devolvía un análisis totalmente convicente, más allá de ser totalmente inventado. Sigo sin saber qué estaba comparando realmente.
+- En consecuencia, me gustaría agregar algo que valide si la enmienda parece no corresponderse con el original. Lo agregaría como metadata, no frenaría el proceso.
+- Sigo teniendo algunos problemas con poder usar langfuse correctamente, nunca me llevé bien con contextos y decoradores. En un momento saqué los spans porque claramente los había implementado mal y aparecía mucha repetición en langfuse.

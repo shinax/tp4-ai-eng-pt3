@@ -24,11 +24,11 @@ def main():
         description="LegalMove PIM4 - Comparador de contratos con Vision y Agentes (produccion).",
     )
     parser.add_argument(
-        "original_path", type=str, nargs="?", default=original_image,
+        "--original_path", type=str, default=original_image,
         help="Ruta a la imagen del contrato original (PNG/JPG/JPEG). Default: definido en el codigo.",
     )
     parser.add_argument(
-        "amendment_path", type=str, nargs="?", default=amended_image,
+        "--amendment_path", type=str, default=amended_image,
         help="Ruta a la imagen de la adenda (PNG/JPG/JPEG). Default: definido en el codigo.",
     )
     args = parser.parse_args()
@@ -40,13 +40,14 @@ def main():
     print("=" * 70)
     print(f"  Contrato original : {Path(args.original_path).name}")
     print(f"  Adenda            : {Path(args.amendment_path).name}")
+    breakpoint()
     
     
     trace_id = langfuse_client.create_trace_id()
     print(f"  Trace ID          : {trace_id}")
     # Process the images
-    result_image_1 = parse_contract_image(original_image, image_label="original_image", trace_id=trace_id, langfuse_client=langfuse_client)
-    result_image_2 = parse_contract_image(amended_image, image_label="amended_image", trace_id=trace_id, langfuse_client=langfuse_client)
+    result_image_1 = parse_contract_image(args.original_path, image_label="original_image", trace_id=trace_id, langfuse_client=langfuse_client)
+    result_image_2 = parse_contract_image(args.amendment_path, image_label="amended_image", trace_id=trace_id, langfuse_client=langfuse_client)
     
     # Contextualización de los resultados para la comparación
     contextualizer = ContextualizationAgent(langfuse_client=langfuse_client,)
