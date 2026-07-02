@@ -1,6 +1,6 @@
 # 🤖 Sistema de Análisis de Contratos con Agentes IA
 
-Una aplicación Python de **cuatro agentes de IA** que leen, contextualizan, extraen y comparan contratos usando OpenAI Vision (GPT-4o), con trazas completas en Langfuse y validación estructurada con Pydantic.
+Una aplicación Python de **dos agentes de IA** que leen, contextualizan, extraen y comparan contratos usando OpenAI Vision (GPT-4o), con trazas completas en Langfuse y validación estructurada con Pydantic.
 
 ## ✨ Características Principales
 
@@ -38,6 +38,9 @@ python main.py
 
 # Opción 2: Con contratos reales
 python main.py -original_path="./examples/documento_1__original.jpg" -amendment_path="./examples/documento_1__enmienda.jpg"
+
+# Opción 3: Agregando prompts personalizados
+python main.py --original_path="./examples/documento_1__original.jpg" --amendment_path="./examples/documento_1__enmienda.jpg" --change_extractor_prompt="Devolveme una instancia simple y válida de la clase ContractChangeOutput, en idioma francés" --contextualizer_prompt="Devolveme el string 'batman rules'" --image_parser_prompt="Devolveme un string de 10 caracteres"
 ```
 
 ## 📚 Estructura del Proyecto
@@ -122,3 +125,5 @@ Después de ejecutar, accede a tu dashboard en https://cloud.langfuse.com para v
 - En un momento me olvidé de pasarle los resultados de los parseos de las imágenes al ContextualizationAgent y devolvía un análisis totalmente convicente, más allá de ser totalmente inventado. Sigo sin saber qué estaba comparando realmente.
 - En consecuencia, me gustaría agregar algo que valide si la enmienda parece no corresponderse con el original. Lo agregaría como metadata, no frenaría el proceso.
 - Sigo teniendo algunos problemas con poder usar langfuse correctamente, nunca me llevé bien con contextos y decoradores. En un momento saqué los spans porque claramente los había implementado mal y aparecía mucha repetición en langfuse.
+- Agregar un `sys.excepthook` que haga .flush()
+- Recomiendo fuertemente probar el caso de ejemplo #3, para probar prompts personalizados.
