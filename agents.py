@@ -56,6 +56,7 @@ class ChangeExtractorAgent:
             - topics_touched: temas legales/comerciales afectados (ej: duración contractual).
             - summary_of_the_change: resumen detallado pero conciso, distinguiendo adiciones,
             eliminaciones y modificaciones (mínimo 10 caracteres).
+            Agrupa los cambios en categorías, empezando cada sección con "ADICION: ", "ELIMINACION: ", o "MODIFICACION: ".
             """
         
         # Llamar a OpenAI para extraer cambios (autotraced por langfuse.openai)
