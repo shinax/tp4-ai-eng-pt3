@@ -40,7 +40,6 @@ def main():
     print("=" * 70)
     print(f"  Contrato original : {Path(args.original_path).name}")
     print(f"  Adenda            : {Path(args.amendment_path).name}")
-    breakpoint()
     
     
     trace_id = langfuse_client.create_trace_id()
